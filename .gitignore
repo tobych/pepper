@@ -7,3 +7,5 @@ MANIFEST
 dist/
 salt_pepper.egg-info/
 .tox/
+
+/.eggs
