@@ -158,6 +158,7 @@ class Pepper(object):
                   }
         try:
             resp = requests.get(**params)
+            resp.raise_for_status()
 
             if resp.status_code == 401:
                 raise PepperException(str(resp.status_code) + ':Authentication denied')
@@ -245,7 +246,8 @@ class Pepper(object):
                 raise PepperException('Authentication denied')
 
             if status == 500:
-                raise PepperException('Server error.')
+                raise exc
+                # raise PepperException('Server error.')
 
             logger.error('Error with request: {0}'.format(exc))
             raise
