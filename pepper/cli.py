@@ -385,16 +385,31 @@ class PepperCli(object):
             config = RawConfigParser()
         config.read(self.options.config)
 
+        logger.debug(f"defaults = {config.defaults()}")
+
+        for section in config.sections():
+            logger.debug(f"{section} -> {config.items(section)}")
+
         # read file
         profile = self.options.profile
+
+        logger.debug(f"profile = {profile}")
+
         if config.has_section(profile):
+            logger.debug("Okay, config has section '{profile}'")
             for key, value in list(results.items()):
                 if config.has_option(profile, key):
                     results[key] = config.get(profile, key)
+            logger.debug(f"merged from config: results = {results}")
+        else:
+            logger.debug(f"Um by the way, config has NO SECTION '{profile}'")
 
         # get environment values
         for key, value in list(results.items()):
             results[key] = os.environ.get(key, results[key])
+        logger.debug(f"merged from environment: results = {results}")
+
+        # this stuff should not happen: it's overwriting env vars locally - it should build its own dict instead
 
         if results['SALTAPI_EAUTH'] == 'kerberos':
             results['SALTAPI_PASS'] = None
@@ -420,6 +435,8 @@ class PepperCli(object):
             if self.options.password is not None:
                 results['SALTAPI_PASS'] = self.options.password
 
+        logger.debug(f"done messy things results = {results}")
+
         return results
 
     def parse_url(self):
@@ -436,6 +453,7 @@ class PepperCli(object):
 
         # read file
         profile = self.options.profile
+        logger.debug(f"profile = {profile}")
         if config.has_section(profile):
             if config.has_option(profile, "SALTAPI_URL"):
                 url = config.get(profile, "SALTAPI_URL")
@@ -603,22 +621,37 @@ class PepperCli(object):
             yield exit_code, [{'Failed': failed}]
 
     def login(self, api):
+
+        logger.debug(f"userun = {self.options.userun}")
+
         login = api.token if self.options.userun else api.login
 
+        logger.debug(f"login (method) = {login}")
+
+        logger.debug(f"mktoken = {self.options.mktoken}")
+
         if self.options.mktoken:
+            logger.debug("mktoken is set")
+
             token_file = self.options.cache
+            logger.debug(f"token_file = {token_file}")
             try:
+                logger.debug("trying to read token file...")
                 with open(token_file, 'rt') as f:
                     auth = json.load(f)
-                if auth['expire'] < time.time()+30:
-                    logger.error('Login token expired')
+                logger.debug(f"okay, read token file: auth = {auth}")
+                if auth['expire'] < time.time() + 30:
+                    logger.error("Login token has expired so we'll just raise an f*cking exception because that seems like a good idea")
                     raise Exception('Login token expired')
             except Exception as e:
-                if e.args[0] != 2:
+                if e.args[0] != 2:  # WTF?
+                    logger.error("couldn't parse the token file so let's just delete it because that seems like a good idea")
                     logger.error('Unable to load login token from {0} {1}'.format(token_file, str(e)))
                     if os.path.isfile(token_file):
                         os.remove(token_file)
+                logger.debug("let's try to login (again) then i guess")
                 auth = login(**self.parse_login())
+                logger.debug("okay we logged in, so let's store the token")
                 try:
                     oldumask = os.umask(0)
                     fdsc = os.open(token_file, os.O_WRONLY | os.O_CREAT, 0o600)
@@ -629,7 +662,14 @@ class PepperCli(object):
                 finally:
                     os.umask(oldumask)
         else:
-            auth = login(**self.parse_login())
+            logger.debug("mktoken is NOT set so we'll just login")
+
+            credentials = self.parse_login()
+            logger.debug(f"credentials = {credentials}")
+
+            logger.debug("logging in...")
+
+            auth = login(**credentials)
 
         api.auth = auth
         self.auth = auth
@@ -657,17 +697,39 @@ class PepperCli(object):
         '''
         # set up logging
         rootLogger = logging.getLogger(name=None)
-        rootLogger.addHandler(logging.StreamHandler())
-        rootLogger.setLevel(max(logging.ERROR - (self.options.verbose * 10), 1))
+        # rootLogger.addHandler(logging.StreamHandler())
+        level = max(logging.ERROR - (self.options.verbose * 10), 1)
+
+        level = logging.DEBUG
+
+        logger.info(f"Setting root logger to level {level}")
+        rootLogger.setLevel(level)
+
+        api_url = self.parse_url()
+        logger.debug(f"api_url is {api_url}")
+
+        logger.debug("creating Pepper instance...")
 
         api = pepper.Pepper(
-            self.parse_url(),
+            api_url,
             debug_http=self.options.debug_http,
             ignore_ssl_errors=self.options.ignore_ssl_certificate_errors)
 
+        logger.debug("okay, built Pepper instance")
+        logger.debug(f"api.api_url = {api.api_url}")
+        logger.debug(f"api.debug_http = {api.debug_http}")
+        logger.debug(f"api._ssl_verify = {api._ssl_verify}")
+        logger.debug(f"api.auth = {api.auth}")
+
+        logger.debug(f"let's try to login...")
+
         self.login(api)
 
+        logger.debug(f"okay, logged in")
+
         load = self.parse_cmd(api)
+
+        logger.debug(f"load (the low data) = {load}")
 
         for entry in load:
             if not entry.get('client', '').startswith('wheel'):

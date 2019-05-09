@@ -12,9 +12,10 @@ except ImportError:  # Python < 2.7
     class NullHandler(logging.Handler):
         def emit(self, record): pass
 
-logging.basicConfig(format='%(levelname)s %(asctime)s %(module)s: %(message)s')
+logging.basicConfig(format='%(asctime)s,%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',
+                    datefmt='%Y-%m-%d:%H:%M:%S', level=logging.DEBUG)
 logger = logging.getLogger('pepper')
-logger.addHandler(NullHandler())
+# logger.addHandler(NullHandler())
 
 
 if __name__ == '__main__':

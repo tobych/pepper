@@ -213,7 +213,14 @@ class Pepper(object):
 
         # Create request object
         url = self._construct_url(path)
+
+        logger.debug(f"url = {url}")
+        logger.debug(f"postdata = {postdata}")
+        logger.debug(f"headers = {headers}")
+
         req = Request(url, postdata, headers)
+
+        logger.debug(f"data = {data}")
 
         # Add POST data to request
         if data is not None:
@@ -223,27 +230,51 @@ class Pepper(object):
         if path != '/run' and self.auth and 'token' in self.auth and self.auth['token']:
             req.add_header('X-Auth-Token', self.auth['token'])
 
+        logger.debug(f"req.header_items() = {req.header_items()}")
+
         # Send request
+        logger.debug("Sending request...")
         try:
             if not (self._ssl_verify):
                 con = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
                 f = urlopen(req, context=con)
             else:
+                logger.debug("Calling urlopen()...")
                 f = urlopen(req)
+                # we get an HTTPResponse back
+                logger.debug("okay, got response:")
+                logger.debug(f"f.msg = {f.msg}")
+                logger.debug(f"f.status = {f.status}")
             content = f.read().decode('utf-8')
             if (self.debug_http):
                 logger.debug('Response: %s', content)
             ret = json.loads(content)
+
+            logger.debug(f"ret = {ret}")
 
             if not self.salt_version and 'x-salt-version' in f.headers:
                 self._parse_salt_version(f.headers['x-salt-version'])
 
         except (HTTPError, URLError) as exc:
             logger.debug('Error with request', exc_info=True)
+
+            if isinstance(exc, HTTPError):
+                logger.debug(f"HTTPError.reason = {exc.reason}")
+
+            raise
+
             status = getattr(exc, 'code', None)
 
             if status == 401:
                 raise PepperException('Authentication denied')
+                # user should look at master's log file for info
+                # esp as it could be because salt-api is misconfigured
+                # (in /etc/salt/master or whatever)
+                # also check salt-api is running
+                # also restart master then salt-api in case config has not been read
+                # sudo service salt-master restart && sudo service salt-api restart
+                # NB "Authentication failure of type "token" occurred."
+                # will mean PERMISSIONS really!!!
 
             if status == 500:
                 raise exc
@@ -448,6 +479,7 @@ class Pepper(object):
         return self.low([low])
 
     def _send_auth(self, path, **kwargs):
+        # uh?
         return self.req(path, kwargs)
 
     def login(self, username=None, password=None, eauth=None, **kwargs):
@@ -456,6 +488,9 @@ class Pepper(object):
         authentication token or an empty dict
 
         '''
+
+        # argh!
+
         local = locals()
         kwargs.update(
             dict(
@@ -466,6 +501,9 @@ class Pepper(object):
                 ) if local.get(key, None) is not None
             )
         )
+
+        logging.debug("logging in...")
+        logging.debug(f"kwargs = {kwargs}")
         self.auth = self._send_auth('/login', **kwargs).get('return', [{}])[0]
         return self.auth
 
